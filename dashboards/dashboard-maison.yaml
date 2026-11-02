@@ -1,0 +1,2243 @@
+# =============================================================================
+#  Dashboard Maison — version améliorée
+#  À coller dans : Paramètres > Tableaux de bord > dashboard-maison > ⋮ > Éditeur YAML brut
+#
+#  Note : ce fichier utilise des ancres YAML (&nom / *nom) pour éviter les
+#  copier-coller de styles. HA les accepte à l'import mais les « déplie » à
+#  l'enregistrement : garde CE fichier comme source de vérité.
+# =============================================================================
+
+navbar-templates:
+  nav-bar:
+    routes:
+      - icon: mdi:home
+        label: Accueil
+        url: /dashboard-maison/0
+      - icon: mdi:cart
+        label: Courses
+        url: /dashboard-maison/liste-de-courses
+      - icon: mdi:clipboard-list
+        label: To Do
+        url: /dashboard-maison/to-do
+      - icon: mdi:water-check
+        label: Cycle
+        url: /dashboard-maison/menstruations
+      - icon: mdi:car
+        label: Voiture
+        url: /dashboard-maison/voiture
+        # Même restriction que la vue « Voiture » (sinon les autres users
+        # tombent sur une vue vide).
+        hidden: |
+          [[[
+            return !['de1fc08b628c4608afe7d6a11e3b3947',
+                     'c3a2b4ac5c974ec18cda2cc424c02ed1'].includes(user.id);
+          ]]]
+      - icon: mdi:dots-vertical
+        label: Plus
+        tap_action:
+          action: open-popup
+        popup:
+          - icon: mdi:cog
+            label: Réglages
+            url: /config/dashboard
+          - icon: mdi:hammer
+            label: Outils dev
+            url: /developer-tools/yaml
+          - icon: mdi:power
+            label: Redémarrer
+            tap_action:
+              action: call-service
+              service: homeassistant.restart
+              service_data: {}
+              confirmation:
+                text: Redémarrer Home Assistant ?
+    desktop:
+      position: left
+      show_labels: true
+    mobile:
+      show_labels: true
+    media_player:
+      players:
+        - entity: media_player.multiroom_2
+      desktop_position: bottom-center
+
+views:
+  # ===========================================================================
+  #  ACCUEIL
+  # ===========================================================================
+  - type: sections
+    title: Home
+    icon: mdi:home-account
+    theme: Material You
+    max_columns: 4
+    badges: []
+    cards: []
+    header:
+      layout: center
+      badges_position: bottom
+      badges_wrap: scroll
+      card:
+        type: markdown
+        text_only: true
+        # Avant : le « # » était seul sur sa ligne → H1 vide + salutation en
+        # texte normal (le style h1 ne s'appliquait jamais).
+        content: |-
+          {%- set h = now().hour -%}
+          {%- set jours = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'] -%}
+          {%- set mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'] -%}
+          # {% if h < 6 %}🌙 Bonne nuit{% elif h < 12 %}☀️ Bonjour{% elif h < 18 %}🌤️ Bon après-midi{% elif h < 22 %}🌆 Bonsoir{% else %}🌙 Bonne soirée{% endif %} {{ user }}
+
+
+          {{ jours[now().weekday()] | capitalize }} {{ now().day }} {{ mois[now().month - 1] }}
+        card_mod:
+          style: |
+            ha-card {
+              background: none;
+              box-shadow: none;
+              border: none;
+              padding: 0 12px 10px 12px;
+            }
+            ha-markdown { padding: 0 !important; }
+            h1 {
+              font-size: 36px;
+              font-weight: 800;
+              line-height: 1.1;
+              margin: 0;
+              letter-spacing: -1px;
+            }
+            p {
+              margin-top: 6px;
+              opacity: 0.7;
+              font-size: 15px;
+            }
+    background:
+      opacity: 30
+      alignment: center
+      size: auto
+      repeat: no-repeat
+      attachment: scroll
+      image:
+        media_content_id: media-source://image_upload/cbb12546ddc6a07104e51c269111fecb
+        media_content_type: image/jpeg
+        metadata:
+          title: att._WlKwtVmpjx8CIPYCyHoCL5T7YX4quwiEVZzOOuWMfw.jpeg
+          thumbnail: /api/image/serve/cbb12546ddc6a07104e51c269111fecb/256x256
+          media_class: image
+          navigateIds:
+            - {}
+            - media_content_type: app
+              media_content_id: media-source://image_upload
+    sections:
+      # ---------------------------------------------------------------------
+      #  Résumé : météo / lumières / fenêtres + agenda + personnes
+      # ---------------------------------------------------------------------
+      - type: grid
+        column_span: 1
+        theme: Frosted Glass
+        cards:
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: weather
+                entity: weather.forecast_maison
+                show_temperature: true
+                show_conditions: false
+              - type: template
+                entity: sensor.lumieres_allumees
+                icon: mdi:lightbulb-group
+                content: >-
+                  {{ states('sensor.lumieres_allumees') | int(0) }} allumée(s)
+                icon_color: >-
+                  {{ 'amber' if states('sensor.lumieres_allumees') | int(0) > 0 else 'grey' }}
+                tap_action:
+                  action: navigate
+                  # ⚠️ À vérifier : pointe vers un AUTRE dashboard (/lovelace).
+                  navigation_path: /lovelace/lumieres
+              - type: template
+                entity: binary_sensor.group_capteurs_fenetres
+                icon: >-
+                  {{ 'mdi:window-open-variant'
+                     if is_state('binary_sensor.group_capteurs_fenetres', 'on')
+                     else 'mdi:window-closed-variant' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.group_capteurs_fenetres', 'on') else 'green' }}
+                content: >-
+                  {%- set n = expand('binary_sensor.group_capteurs_fenetres')
+                       | selectattr('state', 'eq', 'on') | list | count -%}
+                  {%- if n == 0 -%}Tout fermé
+                  {%- elif n == 1 -%}1 ouverte
+                  {%- else -%}{{ n }} ouvertes{%- endif -%}
+                tap_action:
+                  action: more-info
+
+          - type: custom:calendar-card-pro
+            entities:
+              - calendar.hell_s_house
+            days_to_show: 14
+            compact_events_to_show: 3
+            day_separator_width: 1px
+            week_separator_width: 1px
+            month_separator_width: 1px
+            weekday_font_size: 12px
+            day_font_size: 21px
+            month_font_size: 10px
+            event_font_size: 13px
+            time_font_size: 11px
+            show_location: false
+            tap_action:
+              action: expand
+            hold_action:
+              action: navigate
+              navigation_path: /calendar
+            weather:
+              position: none
+              date:
+                show_conditions: false
+                show_high_temp: false
+                color: var(--primary-text-color)
+              event:
+                color: var(--primary-text-color)
+
+          - type: horizontal-stack
+            cards:
+              - type: custom:bubble-card
+                card_type: button
+                button_type: switch
+                entity: person.cyril
+                name: Cyril
+                show_state: true
+                tap_action:
+                  action: navigate
+                  navigation_path: '#popup-cyril'
+                button_action:
+                  tap_action:
+                    action: navigate
+                    navigation_path: '#popup-cyril'
+                sub_button:
+                  main: []
+                  bottom: []
+                grid_options:
+                  columns: 6
+                  rows: auto
+                # Avant : .bubble-icon-container était déclaré 2 fois, le 2e
+                # écrasait le 1er → la pastille vert/bleu (maison/absent)
+                # ne s'affichait jamais. Fusionné ici.
+                styles: &person_card_style |-
+                  .bubble-button-card-container {
+                    background: rgba(35, 35, 35, 0.42) !important;
+                    backdrop-filter: blur(18px) saturate(160%);
+                    -webkit-backdrop-filter: blur(18px) saturate(160%);
+                    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+                    border-radius: 22px !important;
+                    box-shadow:
+                      0 8px 28px rgba(0, 0, 0, 0.35),
+                      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+                    overflow: hidden;
+                  }
+                  .bubble-button-background { background: transparent !important; }
+                  .bubble-icon-container {
+                    background: ${
+                      state === 'home'
+                        ? 'rgba(34, 197, 94, 0.75)'
+                        : 'rgba(59, 130, 246, 0.75)'
+                    } !important;
+                    border-radius: 50% !important;
+                    border: 1px solid rgba(255, 255, 255, 0.16);
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+                  }
+                  .bubble-icon { color: white !important; opacity: 0.95; }
+                  .bubble-name {
+                    font-weight: 700 !important;
+                    font-size: 16px !important;
+                    color: white !important;
+                  }
+                  .bubble-state {
+                    font-size: 14px !important;
+                    color: rgba(255, 255, 255, 0.82) !important;
+                  }
+                  .bubble-button-card-container::after {
+                    content: "";
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(
+                      135deg,
+                      rgba(255, 255, 255, 0.16),
+                      rgba(255, 255, 255, 0.02) 38%,
+                      rgba(255, 255, 255, 0) 65%
+                    );
+                    pointer-events: none;
+                  }
+              - type: custom:bubble-card
+                card_type: button
+                button_type: switch
+                entity: person.mollye
+                name: Mollye
+                show_state: true
+                tap_action:
+                  action: navigate
+                  navigation_path: '#popup-mollye'
+                button_action:
+                  tap_action:
+                    action: navigate
+                    navigation_path: '#popup-mollye'
+                sub_button:
+                  main: []
+                  bottom: []
+                grid_options:
+                  columns: 6
+                  rows: auto
+                styles: *person_card_style
+
+      # ---------------------------------------------------------------------
+      #  Bureau
+      # ---------------------------------------------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Bureau
+            icon: mdi:desk
+            badges:
+              - type: entity
+                entity: sensor.t_h_bureau_temperature
+                show_state: true
+                show_icon: true
+                color: red
+              - type: entity
+                entity: sensor.t_h_bureau_humidity
+                show_state: true
+                show_icon: true
+                color: light-blue
+
+          - type: custom:bubble-card
+            card_type: button
+            button_type: switch
+            entity: switch.3d_printer
+            name: 3D Printer
+            icon: mdi:printer-3d
+            show_state: true
+            # Tap = popup imprimante · Appui long = ON/OFF
+            tap_action:
+              action: navigate
+              navigation_path: '#3d_printer'
+            button_action:
+              tap_action:
+                action: navigate
+                navigation_path: '#3d_printer'
+              double_tap_action:
+                action: none
+              hold_action:
+                action: toggle
+            sub_button:
+              main: []
+              bottom: []
+            grid_options:
+              columns: 6
+              rows: auto
+
+          - type: custom:bubble-card
+            card_type: button
+            button_type: switch
+            entity: switch.pc_cachyos
+            name: PC Gaming
+            icon: mdi:desktop-tower-monitor
+            show_state: true
+            tap_action:
+              action: toggle
+            hold_action:
+              action: more-info
+            sub_button:
+              main:
+                - entity: binary_sensor.sunshine_cachyos
+                  icon: mdi:weather-night
+                  show_state: false
+                  show_background: true
+                  tap_action:
+                    action: more-info
+              bottom: []
+            grid_options:
+              columns: 6
+              rows: auto
+            visibility:
+              - condition: user
+                users:
+                  - de1fc08b628c4608afe7d6a11e3b3947
+            styles: |
+              /* PC GAMING — OFF = gris · BOOT = orange · READY (Sunshine) = vert */
+
+              .bubble-button-background {
+                opacity: 0 !important;
+              }
+
+              .bubble-button-card-container {
+                --bubble-button-background-color: transparent !important;
+                --bubble-button-accent-color: transparent !important;
+                height: 58px !important;
+                min-height: 58px !important;
+                border-radius: 24px !important;
+                padding: 0 5px !important;
+                display: flex !important;
+                align-items: center !important;
+                overflow: hidden !important;
+                transition:
+                  background 0.35s ease,
+                  box-shadow 0.35s ease !important;
+                background: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? 'rgba(38, 95, 65, 0.95)'
+                    : state === 'on'
+                      ? 'rgba(125, 83, 25, 0.95)'
+                      : 'rgba(55, 55, 62, 0.95)'
+                } !important;
+                box-shadow: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? '0 0 14px rgba(80, 220, 130, 0.15)'
+                    : state === 'on'
+                      ? '0 0 12px rgba(255, 165, 50, 0.12)'
+                      : 'none'
+                } !important;
+              }
+
+              .bubble-content-container {
+                height: 100% !important;
+                min-width: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+              }
+
+              .bubble-icon-container {
+                width: 42px !important;
+                height: 42px !important;
+                min-width: 42px !important;
+                margin-right: 7px !important;
+                border-radius: 16px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? 'rgba(80, 220, 130, 0.18)'
+                    : state === 'on'
+                      ? 'rgba(255, 165, 50, 0.18)'
+                      : 'rgba(20, 20, 25, 0.55)'
+                } !important;
+              }
+
+              .bubble-icon {
+                width: 21px !important;
+                height: 21px !important;
+                color: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? 'rgb(100, 235, 145)'
+                    : state === 'on'
+                      ? 'rgb(255, 175, 65)'
+                      : 'rgba(210, 210, 220, 0.65)'
+                } !important;
+              }
+
+              .bubble-name-container {
+                height: 100% !important;
+                min-width: 0 !important;
+                flex: 1 1 auto !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+              }
+
+              .bubble-name {
+                font-size: 12px !important;
+                font-weight: 650 !important;
+                line-height: 15px !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+              }
+
+              .bubble-state {
+                font-size: 0 !important;
+                line-height: 13px !important;
+                opacity: 0.75 !important;
+                white-space: nowrap !important;
+              }
+
+              .bubble-state::after {
+                content: ${
+                  hass.states['switch.pc_cachyos']?.state !== 'on'
+                    ? '"Éteint"'
+                    : hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                      ? '"Sunshine prêt"'
+                      : '"Démarrage..."'
+                };
+                font-size: 9px !important;
+                line-height: 13px !important;
+                white-space: nowrap !important;
+                color: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? 'rgb(130, 235, 165)'
+                    : state === 'on'
+                      ? 'rgb(255, 195, 115)'
+                      : 'rgba(220, 220, 225, 0.65)'
+                } !important;
+              }
+
+              .bubble-sub-button-1 {
+                width: 32px !important;
+                height: 32px !important;
+                min-width: 32px !important;
+                margin-left: 4px !important;
+                margin-right: 1px !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? 'rgba(80, 220, 130, 0.20)'
+                    : 'rgba(255,255,255,0.07)'
+                } !important;
+                box-shadow: ${
+                  hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                    ? '0 0 9px rgba(80, 220, 130, 0.15)'
+                    : 'none'
+                } !important;
+              }
+
+              ${subButtonIcon[0].setAttribute(
+                "icon",
+                hass.states['binary_sensor.sunshine_cachyos']?.state === 'on'
+                  ? "mdi:white-balance-sunny"
+                  : "mdi:weather-night"
+              )}
+
+      # ---------------------------------------------------------------------
+      #  Salon
+      # ---------------------------------------------------------------------
+      - type: grid
+        column_span: 1
+        cards:
+          - type: heading
+            heading: Salon
+            heading_style: title
+            icon: mdi:sofa
+            grid_options:
+              columns: full
+            tap_action:
+              action: navigate
+              navigation_path: '#TV_remote'
+            badges:
+              - type: entity
+                entity: sensor.t_h_mobile_temperature
+                show_state: true
+                show_icon: true
+                color: red
+              - type: button
+                icon: mdi:remote-tv
+                text: TV
+                color: blue
+                tap_action:
+                  action: navigate
+                  navigation_path: '#TV_remote'
+              - type: button
+                icon: mdi:camera-iris
+                text: Caméra
+                color: indigo
+                tap_action:
+                  action: navigate
+                  navigation_path: '#camera_salon'
+              - type: button
+                icon: mdi:fan
+                text: Clim
+                color: green
+                tap_action:
+                  action: navigate
+                  navigation_path: '#ventilation'
+
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: template
+                icon: mdi:lightbulb-on
+                icon_color: amber
+                content: Allumer
+                tap_action:
+                  action: perform-action
+                  perform_action: scene.turn_on
+                  target:
+                    entity_id: scene.allumer_salon
+              - type: template
+                icon: mdi:lightbulb-off
+                content: Éteindre
+                tap_action:
+                  action: perform-action
+                  perform_action: scene.turn_on
+                  target:
+                    entity_id: scene.eteindre_salon
+
+          # Avant : condition de visibilité sans « entity » (invalide) →
+          # la carte pouvait disparaître et on ne pouvait plus rallumer.
+          - type: custom:bubble-card
+            card_type: button
+            button_type: slider
+            entity: light.plafonniers
+            name: Plafonniers
+            show_state: true
+            sub_button:
+              main: []
+              bottom: []
+
+          - type: custom:bubble-card
+            card_type: button
+            button_type: switch
+            entity: switch.lampe_salle_a_manger
+            name: Salle à manger
+            icon: mdi:lamp
+            sub_button:
+              main: []
+              bottom: []
+            grid_options:
+              columns: 6
+
+      # ---------------------------------------------------------------------
+      #  Chambre
+      # ---------------------------------------------------------------------
+      - type: grid
+        column_span: 1
+        cards:
+          - type: heading
+            heading: Chambre
+            heading_style: title
+            icon: mdi:bed
+          # (chips-card vide supprimée : elle laissait un trou dans la grille)
+          - type: custom:bubble-card
+            card_type: button
+            button_type: switch
+            entity: switch.prise_lit_cyril
+            icon: mdi:power-plug
+            show_name: true
+            show_state: false
+            card_layout: large
+            scrolling_effect: true
+            # tap désactivé volontairement (évite les coupures accidentelles)
+            tap_action:
+              action: none
+            sub_button:
+              main: []
+              bottom: []
+            grid_options:
+              columns: 6
+              rows: auto
+          - type: custom:bubble-card
+            card_type: button
+            button_type: slider
+            entity: light.table_de_chevet_2
+            light_slider_type: brightness
+            slider_fill_orientation: left
+            slider_value_position: right
+            allow_light_slider_to_0: true
+            light_transition: true
+            show_state: false
+            sub_button:
+              main: []
+              bottom: []
+            grid_options:
+              columns: 6
+              rows: auto
+            visibility:
+              - condition: state
+                entity: switch.prise_lit_cyril
+                state: 'on'
+
+      # ---------------------------------------------------------------------
+      #  Salle de bain
+      # ---------------------------------------------------------------------
+      - type: grid
+        column_span: 1
+        theme: Material You
+        cards:
+          - type: heading
+            heading: Salle de bain
+            heading_style: title
+            icon: mdi:bathtub
+            badges:
+              - type: entity
+                entity: sensor.lavage_machine_a_laver_temps_restant_programme
+                show_state: true
+                show_icon: true
+                color: purple
+                visibility:
+                  - condition: state
+                    entity: sensor.lavage_machine_a_laver_etat_machine
+                    state: running
+          - type: custom:ha-appliance-card
+            appliance_type: washer
+            name: Machine à laver
+            illustration_color: white
+            state_entity: sensor.lavage_machine_a_laver_etat_machine
+            state_map:
+              'false': idle
+              standby: idle
+              running: running
+              paused: paused
+              alarm: error
+            phase_entity: sensor.lavage_machine_a_laver_etape_en_cours
+            program_entity: sensor.lavage_machine_a_laver_programme
+            remaining_time_entity: sensor.lavage_machine_a_laver_temps_restant_programme
+            remaining_time_hide_when_idle: true
+            door_entity: sensor.lavage_machine_a_laver_etat_hublot
+            door_open_state: open
+            alerts_entities:
+              - entity: binary_sensor.lavage_machine_a_laver_etat_lessive
+                label: Bac lessive
+                icon: mdi:spray
+              - entity: binary_sensor.lavage_machine_a_laver_etat_assouplissant
+                label: Bac assouplissant
+                icon: mdi:flower-tulip-outline
+            info_entities:
+              - entity: select.lavage_machine_a_laver_temperature_lavage
+                label: Température
+                icon: mdi:thermometer
+              - entity: select.lavage_machine_a_laver_vitesse_essorage
+                label: Essorage
+                icon: mdi:rotate-3d-variant
+              - entity: sensor.lavage_machine_a_laver_consommation_eau
+                label: Eau aujourd'hui
+                icon: mdi:water
+              - entity: sensor.lavage_machine_a_laver_consommation_electrique
+                label: Énergie aujourd'hui
+                icon: mdi:lightning-bolt
+              - entity: sensor.lavage_machine_a_laver_code_erreur
+                label: Code erreur
+                icon: mdi:alert-circle-outline
+            start_entity: select.lavage_machine_a_laver_actions
+            start_option: start
+            pause_option: pause
+            stop_option: stop
+            corner_entities:
+              - entity: switch.lavage_machine_a_laver_verrouillage_enfant
+                label: Sécurité enfant
+              - entity: switch.lavage_machine_a_laver_mode_silencieux
+                label: Mode silencieux
+
+      # ---------------------------------------------------------------------
+      #  Pop-ups + navbar (section invisible)
+      # ---------------------------------------------------------------------
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
+            media_player:
+              players:
+                - entity: media_player.cuisine
+
+          # ----- Pop-up Cyril -----
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#popup-cyril'
+            button_type: state
+            entity: person.cyril
+            name: Localisation - Cyril
+            show_header: true
+            width_desktop: 950px
+            margin_top_mobile: 80px
+            sub_button:
+              main: []
+              bottom: []
+            cards:
+              - type: custom:mushroom-chips-card
+                alignment: center
+                chips:
+                  - type: template
+                    icon: >-
+                      {{ 'mdi:home' if is_state('person.cyril', 'home') else 'mdi:map-marker' }}
+                    icon_color: >-
+                      {{ 'green' if is_state('person.cyril', 'home') else 'blue' }}
+                    content: >-
+                      {%- set z = states('person.cyril') -%}
+                      {%- if z == 'home' -%}Maison
+                      {%- elif z == 'not_home' -%}En route
+                      {%- else -%}{{ z | replace('_', ' ') | title }}{%- endif -%}
+                  - type: template
+                    icon: mdi:battery
+                    icon_color: >-
+                      {%- set b = state_attr('device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd', 'battery_level') | int(0) -%}
+                      {{ 'red' if b <= 20 else 'orange' if b <= 40 else 'green' }}
+                    content: >-
+                      {{ state_attr('device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd', 'battery_level') | default('?', true) }} %
+                  - type: template
+                    icon: mdi:crosshairs-gps
+                    icon_color: >-
+                      {%- set g = state_attr('device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd', 'gps_accuracy') | int(999) -%}
+                      {{ 'green' if g <= 10 else 'orange' if g <= 50 else 'red' }}
+                    content: >-
+                      {{ state_attr('device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd', 'gps_accuracy') | default('?', true) }} m
+                  - type: template
+                    icon: mdi:speedometer
+                    icon_color: >-
+                      {%- set t = 'device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd' -%}
+                      {%- set s = (state_attr(t, 'velocity') or state_attr(t, 'speed') or 0) | float(0) -%}
+                      {{ 'blue' if s > 0 else 'grey' }}
+                    content: >-
+                      {%- set t = 'device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd' -%}
+                      {%- set s = (state_attr(t, 'velocity') or state_attr(t, 'speed') or 0) | float(0) -%}
+                      {{ (s * 3.6) | round(0) | int }} km/h
+                  - type: template
+                    icon: mdi:clock-outline
+                    icon_color: blue
+                    content: >-
+                      {{ relative_time(states.device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd.last_changed) }}
+              - type: custom:map-card
+                card_size: 5
+                zoom: 16
+                maxZoom: 20
+                theme_mode: dark
+                focus_entity: device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd
+                focus_follow: refocus
+                options: &map_locked
+                  dragging: false
+                  touchZoom: false
+                  doubleClickZoom: false
+                  scrollWheelZoom: false
+                  boxZoom: false
+                  keyboard: false
+                entities:
+                  - entity: device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd
+                    name: Cyril
+                    display: icon
+                    icon: mdi:account-circle
+                    size: 42
+                    color: '#0A84FF'
+                    history_start: 24 hours ago
+                    history_line_color: '#0A84FF'
+                    history_show_dots: false
+              - type: custom:mushroom-template-card
+                entity: person.cyril
+                primary: 📍 Position actuelle
+                secondary: >-
+                  {%- set z = states(entity) -%}
+                  {%- set t = 'device_tracker.cdupret_e3fddf27_feab_413e_b69d_e6828ea160bd' -%}
+                  {%- if z == 'home' -%}À la maison
+                  {%- elif z == 'not_home' -%}En déplacement
+                  {%- else -%}{{ z | replace('_', ' ') | title }}{%- endif %}
+                  · GPS {{ state_attr(t, 'gps_accuracy') | default('?', true) }} m
+                  · Batterie {{ state_attr(t, 'battery_level') | default('?', true) }} %
+                icon: mdi:map-marker-radius
+                icon_color: blue
+                tap_action:
+                  action: more-info
+
+          # ----- Pop-up Mollye -----
+          # Avant : batterie + GPS lisaient le téléphone de CYRIL (copier-coller).
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#popup-mollye'
+            button_type: state
+            entity: person.mollye
+            name: Localisation - Mollye
+            show_header: true
+            width_desktop: 950px
+            margin_top_mobile: 80px
+            sub_button:
+              main: []
+              bottom: []
+            cards:
+              - type: custom:mushroom-chips-card
+                alignment: center
+                chips:
+                  - type: template
+                    icon: >-
+                      {{ 'mdi:home' if is_state('person.mollye', 'home') else 'mdi:map-marker' }}
+                    icon_color: >-
+                      {{ 'green' if is_state('person.mollye', 'home') else 'blue' }}
+                    content: >-
+                      {%- set z = states('person.mollye') -%}
+                      {%- if z == 'home' -%}Maison
+                      {%- elif z == 'not_home' -%}En route
+                      {%- else -%}{{ z | replace('_', ' ') | title }}{%- endif -%}
+                  - type: template
+                    icon: mdi:battery
+                    icon_color: >-
+                      {%- set b = state_attr('device_tracker.cph2415', 'battery_level') | int(0) -%}
+                      {{ 'red' if b <= 20 else 'orange' if b <= 40 else 'green' }}
+                    content: >-
+                      {{ state_attr('device_tracker.cph2415', 'battery_level') | default('?', true) }} %
+                  - type: template
+                    icon: mdi:crosshairs-gps
+                    icon_color: >-
+                      {%- set g = state_attr('device_tracker.cph2415', 'gps_accuracy') | int(999) -%}
+                      {{ 'green' if g <= 10 else 'orange' if g <= 50 else 'red' }}
+                    content: >-
+                      {{ state_attr('device_tracker.cph2415', 'gps_accuracy') | default('?', true) }} m
+                  - type: template
+                    icon: mdi:speedometer
+                    icon_color: >-
+                      {%- set s = (state_attr('device_tracker.cph2415', 'velocity') or state_attr('device_tracker.cph2415', 'speed') or 0) | float(0) -%}
+                      {{ 'blue' if s > 0 else 'grey' }}
+                    content: >-
+                      {%- set s = (state_attr('device_tracker.cph2415', 'velocity') or state_attr('device_tracker.cph2415', 'speed') or 0) | float(0) -%}
+                      {{ (s * 3.6) | round(0) | int }} km/h
+                  - type: template
+                    icon: mdi:clock-outline
+                    icon_color: blue
+                    content: >-
+                      {{ relative_time(states.device_tracker.cph2415.last_changed) }}
+              - type: custom:map-card
+                card_size: 5
+                zoom: 16
+                maxZoom: 20
+                theme_mode: dark
+                focus_entity: device_tracker.cph2415
+                focus_follow: refocus
+                options: *map_locked
+                entities:
+                  - entity: device_tracker.cph2415
+                    name: Mollye
+                    display: icon
+                    icon: mdi:account-circle
+                    size: 42
+                    color: '#FF4FA3'
+                    history_start: 24 hours ago
+                    history_line_color: '#FF4FA3'
+                    history_show_dots: false
+              - type: custom:mushroom-template-card
+                entity: person.mollye
+                primary: 📍 Position actuelle
+                secondary: >-
+                  {%- set z = states(entity) -%}
+                  {%- set t = 'device_tracker.cph2415' -%}
+                  {%- if z == 'home' -%}À la maison
+                  {%- elif z == 'not_home' -%}En déplacement
+                  {%- else -%}{{ z | replace('_', ' ') | title }}{%- endif %}
+                  · GPS {{ state_attr(t, 'gps_accuracy') | default('?', true) }} m
+                  · Batterie {{ state_attr(t, 'battery_level') | default('?', true) }} %
+                icon: mdi:map-marker-radius
+                icon_color: pink
+                tap_action:
+                  action: more-info
+
+          # ----- Pop-up Caméra salon -----
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#camera_salon'
+            name: Salon - Caméras
+            icon: mdi:sofa-outline
+            button_type: name
+            buttons_position: right
+            sub_button:
+              main: []
+              bottom: []
+            cards:
+              - type: custom:advanced-camera-card
+                cameras:
+                  - camera_entity: camera.salon_sd_stream
+                    title: Salon
+                    live_provider: auto
+                    ptz:
+                      actions_left:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.salon_move_left
+                      actions_right:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.salon_move_right
+                      actions_up:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.salon_move_up
+                      actions_down:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.salon_move_down
+                      actions_home:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.salon_move_to_home_position
+                view:
+                  default: live
+                  actions:
+                    double_tap_action:
+                      action: custom:advanced-camera-card-action
+                      advanced_camera_card_action: fullscreen
+                  theme:
+                    themes: []
+                live:
+                  preload: true
+                  auto_play:
+                    - selected
+                    - visible
+                  auto_unmute: []
+                  controls:
+                    builtin: true
+                    ptz:
+                      mode: 'off'
+                      position: bottom-right
+                      orientation: horizontal
+                menu:
+                  style: overlay
+                  position: bottom
+                  buttons:
+                    live: { enabled: false }
+                    microphone: { enabled: true }
+                    fullscreen: { enabled: true }
+                    snapshots: { enabled: false }
+                    clips: { enabled: false }
+                    recordings: { enabled: false }
+                    timeline: { enabled: false }
+                    download: { enabled: false }
+                    cameras: { enabled: false }
+                    substreams: { enabled: false }
+                    media_player: { enabled: false }
+                    play: { enabled: true }
+                dimensions:
+                  aspect_ratio_mode: static
+                  aspect_ratio: '16:9'
+                performance:
+                  features:
+                    animated_progress_indicator: true
+              - type: custom:bubble-card
+                card_type: button
+                button_type: switch
+                entity: switch.salon_privacy
+                name: Mode confidentialité
+                icon: mdi:eye-off
+                show_name: true
+                show_state: true
+                sub_button:
+                  main: []
+                  bottom: []
+
+          # ----- Pop-up Ventilation / Clim -----
+          # Hash corrigé : #ventilafion → #ventilation (badge Salon mis à jour)
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#ventilation'
+            name: Flatula Système
+            icon: mdi:fan-alert
+            button_type: name
+            sub_button:
+              main: []
+              bottom: []
+            cards:
+              - &fan_card
+                type: custom:button-card
+                entity: input_boolean.ventilateur_allume
+                name: Ventilateur DOMO
+                icon: mdi:fan
+                show_state: false
+                show_label: true
+                label: |
+                  [[[ return entity.state === "on" ? "En marche" : "Éteint"; ]]]
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - padding: 20px
+                    - border-radius: 28px
+                    - background: linear-gradient(145deg, rgba(35,38,45,0.98), rgba(22,24,29,0.98))
+                    - box-shadow: 0 8px 25px rgba(0,0,0,0.25)
+                    - overflow: visible
+                  grid:
+                    - grid-template-areas: |
+                        "i n power"
+                        "i l power"
+                        "speed speed speed"
+                        "osc silent timer"
+                    - grid-template-columns: 72px 1fr 60px
+                    - grid-template-rows: 34px 26px auto auto
+                    - column-gap: 12px
+                    - row-gap: 14px
+                  img_cell:
+                    - width: 68px
+                    - height: 68px
+                    - border-radius: 50%
+                    - background: rgba(255,255,255,0.10)
+                    - justify-self: center
+                    - align-self: center
+                  icon:
+                    - width: 52px
+                    - color: |
+                        [[[ return entity.state === "on" ? "white" : "rgba(255,255,255,0.45)"; ]]]
+                    - animation: |
+                        [[[ return entity.state === "on" ? "fan-spin 1.4s linear infinite" : "none"; ]]]
+                  name:
+                    - justify-self: start
+                    - align-self: end
+                    - font-size: 18px
+                    - font-weight: 700
+                    - color: white
+                  label:
+                    - justify-self: start
+                    - align-self: start
+                    - font-size: 13px
+                    - color: rgba(255,255,255,0.65)
+                  custom_fields:
+                    power:
+                      - justify-self: center
+                      - align-self: center
+                    speed:
+                      - width: 100%
+                    osc:
+                      - width: 100%
+                    silent:
+                      - width: 100%
+                    timer:
+                      - width: 100%
+                custom_fields:
+                  power:
+                    card:
+                      type: custom:button-card
+                      entity: input_boolean.ventilateur_allume
+                      icon: mdi:power
+                      show_name: false
+                      tap_action:
+                        action: call-service
+                        service: script.ventilateur_marche_arret
+                      styles:
+                        card:
+                          - width: 52px
+                          - height: 52px
+                          - border-radius: 50%
+                          - padding: 0
+                          - box-shadow: none
+                          - background: |
+                              [[[ return entity.state === "on" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.10)"; ]]]
+                        icon:
+                          - width: 26px
+                          - color: |
+                              [[[ return entity.state === "on" ? "rgb(45,105,175)" : "rgba(255,255,255,0.65)"; ]]]
+                  speed:
+                    card:
+                      type: custom:button-card
+                      entity: input_number.vitesse_ventilateur
+                      icon: mdi:fan-plus
+                      show_icon: true
+                      show_name: true
+                      show_label: true
+                      name: Vitesse suivante
+                      label: |
+                        [[[
+                          const speed = parseInt(entity.state) || 0;
+                          return [1, 2, 3, 4, 5].map(i => i <= speed ? "●" : "○").join(" ");
+                        ]]]
+                      tap_action:
+                        action: call-service
+                        service: script.ventilateur_vitesse_suivante
+                      styles:
+                        card:
+                          - height: 78px
+                          - border-radius: 20px
+                          - padding: 12px 16px
+                          - box-shadow: none
+                          - background: rgba(255,255,255,0.11)
+                        grid:
+                          - grid-template-areas: |
+                              "i n"
+                              "i l"
+                          - grid-template-columns: 48px 1fr
+                          - grid-template-rows: 1fr 1fr
+                        icon:
+                          - width: 29px
+                          - color: white
+                        name:
+                          - justify-self: start
+                          - align-self: end
+                          - font-size: 15px
+                          - font-weight: 700
+                          - color: white
+                        label:
+                          - justify-self: start
+                          - align-self: start
+                          - font-size: 19px
+                          - letter-spacing: 3px
+                          - color: white
+                  osc:
+                    card:
+                      type: custom:button-card
+                      entity: input_boolean.oscillation
+                      icon: mdi:rotate-360
+                      name: Oscillation
+                      show_label: true
+                      label: |
+                        [[[
+                          if (states["input_boolean.ventilateur_allume"]?.state !== "on") return "Indisponible";
+                          return entity.state === "on" ? "Activée" : "Désactivée";
+                        ]]]
+                      tap_action:
+                        action: call-service
+                        service: script.ventilateur_oscillation
+                      styles:
+                        card:
+                          - &fan_tile_height height: 76px
+                          - border-radius: 18px
+                          - padding: 8px
+                          - box-shadow: none
+                          - opacity: &fan_dim_when_off |
+                              [[[ return states["input_boolean.ventilateur_allume"]?.state === "on" ? "1" : "0.45"; ]]]
+                          - background: |
+                              [[[ return entity.state === "on" ? "rgba(80,160,255,0.20)" : "rgba(255,255,255,0.08)"; ]]]
+                        grid: &fan_tile_grid
+                          - grid-template-areas: |
+                              "i"
+                              "n"
+                              "l"
+                          - grid-template-rows: 28px 20px 16px
+                        icon:
+                          - width: 25px
+                          - color: |
+                              [[[ return entity.state === "on" ? "rgb(100,175,255)" : "white"; ]]]
+                          - animation: |
+                              [[[ return entity.state === "on" ? "oscillation-move 2.5s ease-in-out infinite" : "none"; ]]]
+                        name: &fan_tile_name
+                          - font-size: 11px
+                          - font-weight: 700
+                          - color: white
+                        label: &fan_tile_label
+                          - font-size: 9px
+                          - color: rgba(255,255,255,0.65)
+                  silent:
+                    card:
+                      type: custom:button-card
+                      entity: input_boolean.mode_silencieux
+                      icon: mdi:weather-night
+                      name: Silence
+                      show_label: true
+                      label: |
+                        [[[
+                          if (states["input_boolean.ventilateur_allume"]?.state !== "on") return "Indisponible";
+                          return entity.state === "on" ? "Activé" : "Désactivé";
+                        ]]]
+                      tap_action:
+                        action: call-service
+                        service: script.ventilateur_mode_silencieux
+                      styles:
+                        card:
+                          - *fan_tile_height
+                          - border-radius: 18px
+                          - padding: 8px
+                          - box-shadow: none
+                          - opacity: *fan_dim_when_off
+                          - background: |
+                              [[[ return entity.state === "on" ? "rgba(165,120,255,0.20)" : "rgba(255,255,255,0.08)"; ]]]
+                        grid: *fan_tile_grid
+                        icon:
+                          - width: 25px
+                          - color: |
+                              [[[ return entity.state === "on" ? "rgb(180,140,255)" : "white"; ]]]
+                        name: *fan_tile_name
+                        label: *fan_tile_label
+                  timer:
+                    card:
+                      type: custom:button-card
+                      entity: input_number.timer
+                      icon: mdi:timer-outline
+                      name: Timer
+                      show_label: true
+                      label: |
+                        [[[ return `${parseInt(entity.state) || 0} h`; ]]]
+                      tap_action:
+                        action: call-service
+                        service: script.ventilateur_timer
+                      styles:
+                        card:
+                          - *fan_tile_height
+                          - border-radius: 18px
+                          - padding: 8px
+                          - box-shadow: none
+                          - opacity: *fan_dim_when_off
+                          - background: |
+                              [[[ return parseInt(entity.state) > 0 ? "rgba(90,225,205,0.20)" : "rgba(255,255,255,0.08)"; ]]]
+                        grid: *fan_tile_grid
+                        icon:
+                          - width: 25px
+                          - color: |
+                              [[[ return parseInt(entity.state) > 0 ? "rgb(110,235,215)" : "white"; ]]]
+                        name: *fan_tile_name
+                        label: *fan_tile_label
+                extra_styles: |
+                  @keyframes fan-spin {
+                    from { transform: rotate(0deg); }
+                    to   { transform: rotate(360deg); }
+                  }
+                  @keyframes oscillation-move {
+                    0%   { transform: rotate(-30deg); }
+                    50%  { transform: rotate(30deg); }
+                    100% { transform: rotate(-30deg); }
+                  }
+              - type: custom:bubble-card
+                card_type: climate
+                entity: climate.climatisation
+                name: Climatifion
+                icon: mdi:home-thermometer
+                min_temp: 17
+                max_temp: 30
+                step: 1
+                hide_temperature: false
+                state_color: true
+                sub_button:
+                  main:
+                    - name: HVAC modes menu
+                      select_attribute: hvac_modes
+                      state_background: false
+                      show_arrow: false
+                      sub_button_type: select
+                  bottom: []
+
+          # ----- Pop-up Imprimante 3D -----
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#3d_printer'
+            name: Imprimante
+            icon: mdi:printer-3d
+            button_type: name
+            sub_button:
+              main: []
+              bottom: []
+            cards:
+              - type: custom:advanced-camera-card
+                cameras:
+                  - camera_entity: camera.mkspi_webcam
+              - type: glance
+                entities:
+                  - entity: sensor.mkspi_print_time_left
+                    name: Temps restant
+                  - entity: sensor.mkspi_progress
+                    name: Progression
+                  - entity: camera.mkspi_thumbnail
+                    name: Aperçu
+              - type: custom:bubble-card
+                card_type: button
+                button_type: switch
+                entity: switch.3d_printer
+                name: Alimentation imprimante
+                icon: mdi:power
+                show_state: true
+                sub_button:
+                  main: []
+                  bottom: []
+
+          # ----- Pop-up Télécommande TV -----
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#TV_remote'
+            name: Télécommande
+            icon: mdi:remote-tv
+            button_type: name
+            cards:
+              - &tv_remote
+                type: custom:universal-remote-card
+                platform: Android TV
+                config_entry_id: 01KRY32PJHWCDHPKEV2A70G6VV
+                remote_id: remote.tv
+                media_player_id: media_player.tv
+                keyboard_id: media_player.tv
+                rows:
+                  - [netflix, youtube, jellyfin, tivimate]
+                  - [back, home, power]
+                  - [touchpad, [volume_buttons]]
+                  - [rewind, previous, play_pause, next, fast_forward]
+                  - [menu, keyboard]
+                custom_actions:
+                  - type: button
+                    name: tivimate
+                    icon: mdi:television-play
+                    tap_action:
+                      action: perform-action
+                      perform_action: script.turn_on
+                      target:
+                        entity_id: script.tv_allumer_et_lancer_une_application
+                      data:
+                        variables:
+                          app: ar.tvplayer.tv
+                  - type: button
+                    name: jellyfin
+                    icon: mdi:jellyfish
+                    tap_action:
+                      action: perform-action
+                      perform_action: script.turn_on
+                      target:
+                        entity_id: script.tv_allumer_et_lancer_une_application
+                      data:
+                        variables:
+                          app: org.jellyfin.androidtv
+                  - type: button
+                    name: youtube
+                    icon: mdi:youtube
+                    tap_action:
+                      action: perform-action
+                      perform_action: script.turn_on
+                      target:
+                        entity_id: script.tv_allumer_et_lancer_une_application
+                      data:
+                        variables:
+                          app: https://www.youtube.com
+                  - type: button
+                    name: netflix
+                    icon: mdi:netflix
+                    tap_action:
+                      action: perform-action
+                      perform_action: script.turn_on
+                      target:
+                        entity_id: script.tv_allumer_et_lancer_une_application
+                      data:
+                        variables:
+                          app: netflix://
+
+  # ===========================================================================
+  #  LISTE DE COURSES
+  # ===========================================================================
+  - type: sections
+    title: Liste de courses
+    path: liste-de-courses
+    icon: mdi:cart
+    theme: Material You
+    max_columns: 4
+    cards: []
+    sections:
+      - type: grid
+        column_span: 1
+        theme: Material You
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Liste de courses
+            icon: mdi:cart
+          - type: todo-list
+            entity: todo.liste_dachats
+            display_order: alpha_asc
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
+    background:
+      opacity: 60
+      alignment: center
+      size: cover
+      repeat: repeat
+      attachment: scroll
+      image:
+        media_content_id: media-source://image_upload/6f89de212d82dc8bd6bea7acecda3a40
+        media_content_type: image/png
+        metadata:
+          title: 17B8DBA9-0A38-4EC5-A90C-4DDF675ECF1B.png
+          thumbnail: /api/image/serve/6f89de212d82dc8bd6bea7acecda3a40/256x256
+          media_class: image
+          navigateIds:
+            - {}
+            - media_content_type: app
+              media_content_id: media-source://image_upload
+
+  # ===========================================================================
+  #  TO-DO
+  # ===========================================================================
+  - type: sections
+    title: To-do
+    path: to-do
+    icon: mdi:clipboard-list-outline
+    theme: Material You
+    max_columns: 4
+    badges: []
+    cards: []
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: |-
+          # ✨ To-do
+          {% set n = states('todo.to_do') | int(0) %}
+          {{ 'Rien à faire, profite ! 🎉' if n == 0 else n ~ ' tâche' ~ ('s' if n > 1 else '') ~ ' en attente' }}
+    sections:
+      - type: grid
+        cards:
+          - type: todo-list
+            entity: todo.to_do
+            display_order: none
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
+    background:
+      opacity: 33
+      alignment: center
+      size: cover
+      repeat: repeat
+      attachment: fixed
+      image:
+        media_content_id: media-source://image_upload/02b07367510ae60b3955ff412442f683
+        media_content_type: image/png
+        metadata:
+          title: A8CDCC32-E165-44DC-8D60-EA73B5709BDE.png
+          thumbnail: /api/image/serve/02b07367510ae60b3955ff412442f683/256x256
+          media_class: image
+          navigateIds:
+            - {}
+            - media_content_type: app
+              media_content_id: media-source://image_upload
+
+  # ===========================================================================
+  #  MENSTRUATIONS
+  # ===========================================================================
+  - type: sections
+    title: Menstruations
+    path: menstruations
+    icon: mdi:water-check
+    theme: Material You
+    max_columns: 4
+    cards: []
+    badges:
+      - type: entity
+        entity: sensor.calcul_ovulation
+        show_name: false
+        show_state: true
+        show_icon: true
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Calendrier
+            heading_style: title
+            icon: mdi:calendar-heart
+          - type: custom:menstruation-gauge-card
+            entity: sensor.mollye
+            friendly_name: Mollye
+            title: ''
+            theme_mode: auto
+            show_fertile_period: true
+            calendar_edit_enabled: true
+            period_duration_days: 5
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
+    background:
+      opacity: 20
+      alignment: top center
+      size: cover
+      repeat: repeat
+      attachment: scroll
+      image:
+        media_content_id: media-source://image_upload/14216c506ef6c216aec86d497118eb92
+        media_content_type: image/jpeg
+        metadata:
+          title: att.zAXrQMe6UL51kxpIEr4O776hTEyM6oNL4BvTaLTG0Rs.jpeg
+          thumbnail: /api/image/serve/14216c506ef6c216aec86d497118eb92/256x256
+          media_class: image
+          navigateIds:
+            - {}
+            - media_content_type: app
+              media_content_id: media-source://image_upload
+
+  # ===========================================================================
+  #  VOITURE
+  # ===========================================================================
+  - type: sections
+    title: Voiture
+    path: voiture
+    icon: mdi:car
+    max_columns: 4
+    visible:
+      - user: de1fc08b628c4608afe7d6a11e3b3947
+      - user: c3a2b4ac5c974ec18cda2cc424c02ed1
+    sections:
+      - type: grid
+        cards:
+          # Avant : la vue ne contenait QUE le pop-up → page vide tant qu'on
+          # ne tapait pas #peugeot à la main. Voici un bouton d'accès.
+          - type: custom:bubble-card
+            card_type: button
+            button_type: name
+            entity: device_tracker.voiture_cyril_vehicule
+            name: Peugeot 208
+            icon: mdi:car-hatchback
+            show_state: true
+            tap_action:
+              action: navigate
+              navigation_path: '#peugeot'
+            button_action:
+              tap_action:
+                action: navigate
+                navigation_path: '#peugeot'
+            sub_button:
+              main:
+                - entity: sensor.voiture_cyril_niveau_carburant
+                  icon: mdi:gas-station
+                  show_state: true
+                  show_background: false
+                  tap_action:
+                    action: navigate
+                    navigation_path: '#peugeot'
+                - entity: binary_sensor.voiture_cyril_portes
+                  show_icon: true
+                  show_state: false
+                  show_background: true
+                  tap_action:
+                    action: navigate
+                    navigation_path: '#peugeot'
+              bottom: []
+
+          - type: custom:bubble-card
+            card_type: pop-up
+            hash: '#peugeot'
+            name: Peugeot 208
+            icon: mdi:car-hatchback
+            entity: device_tracker.voiture_cyril_vehicule
+            button_type: name
+            bg_opacity: 85
+            bg_blur: 12
+            width_desktop: 540px
+            cards:
+              - type: custom:mushroom-title-card
+                title: ''
+                alignment: center
+                subtitle: >-
+                  {% if is_state('binary_sensor.voiture_cyril_deplacement', 'on') %}
+                    🚗 En route · {{ states('sensor.voiture_cyril_vitesse') | int(0) }} km/h
+                  {% elif is_state('binary_sensor.voiture_cyril_moteur', 'on') %}
+                    Moteur allumé
+                  {% elif is_state('device_tracker.voiture_cyril_vehicule', 'home') %}
+                    Garée à la maison
+                  {% else %}
+                    Garée · {{ states('device_tracker.voiture_cyril_vehicule') | replace('not_home', 'hors zone') }}
+                  {% endif %}
+                grid_options: &full_width
+                  columns: 12
+                  rows: auto
+
+              - type: picture-elements
+                image: /local/stellantis_vehicles/AP-ACNT200007194160/VR3UPHPV0T5071816.png
+                grid_options: *full_width
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      border-radius: 24px;
+                      overflow: hidden;
+                      background: radial-gradient(ellipse at 50% 70%,
+                        rgba(var(--rgb-blue, 33, 150, 243), 0.28) 0%,
+                        rgba(var(--rgb-blue, 33, 150, 243), 0.06) 55%,
+                        transparent 80%);
+                    }
+                    ha-card img { padding: 8% 6% 14% 6%; box-sizing: border-box; }
+                elements:
+                  - type: conditional
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_portes
+                        state: 'off'
+                    elements:
+                      - type: icon
+                        icon: mdi:lock
+                        entity: binary_sensor.voiture_cyril_portes
+                        tap_action:
+                          action: more-info
+                        style: &car_badge_right
+                          top: 12%
+                          left: 90%
+                          color: var(--success-color, green)
+                          background: var(--card-background-color)
+                          border-radius: 50%
+                          padding: 6px
+                          box-shadow: 0 2px 8px rgba(0,0,0,0.2)
+                          --mdc-icon-size: 20px
+                  - type: conditional
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_portes
+                        state: 'on'
+                    elements:
+                      - type: icon
+                        icon: mdi:lock-open-variant
+                        entity: binary_sensor.voiture_cyril_portes
+                        tap_action:
+                          action: more-info
+                        style:
+                          top: 12%
+                          left: 90%
+                          color: var(--warning-color, orange)
+                          background: var(--card-background-color)
+                          border-radius: 50%
+                          padding: 6px
+                          box-shadow: 0 2px 8px rgba(0,0,0,0.2)
+                          --mdc-icon-size: 20px
+                  - type: conditional
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_alarme
+                        state: 'on'
+                    elements:
+                      - type: icon
+                        icon: mdi:shield-car
+                        entity: binary_sensor.voiture_cyril_alarme
+                        tap_action:
+                          action: more-info
+                        style:
+                          top: 12%
+                          left: 10%
+                          color: var(--success-color, green)
+                          background: var(--card-background-color)
+                          border-radius: 50%
+                          padding: 6px
+                          box-shadow: 0 2px 8px rgba(0,0,0,0.2)
+                          --mdc-icon-size: 20px
+                  - type: state-label
+                    entity: sensor.voiture_cyril_niveau_carburant
+                    prefix: '⛽ '
+                    style:
+                      top: 90%
+                      left: 20%
+                      padding: 5px 12px
+                      border-radius: 14px
+                      font-weight: 600
+                      font-size: 13px
+                      color: var(--primary-text-color)
+                      background: var(--card-background-color)
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+                  - type: state-label
+                    entity: sensor.voiture_cyril_autonomie_carburant
+                    prefix: '🛣️ '
+                    style:
+                      top: 90%
+                      left: 80%
+                      padding: 5px 12px
+                      border-radius: 14px
+                      font-weight: 600
+                      font-size: 13px
+                      color: var(--primary-text-color)
+                      background: var(--card-background-color)
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+
+              # Alerte ouvrants — conditions passées au format moderne
+              # (l'ancien format entity/state n'est pas fiable dans un « or »).
+              - type: conditional
+                grid_options: *full_width
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_portes
+                        state: 'on'
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_porte_conducteur
+                        state: 'on'
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_porte_passager
+                        state: 'on'
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_porte_arriere_gauche
+                        state: 'on'
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_porte_arriere_droite
+                        state: 'on'
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_coffre
+                        state: 'on'
+                card:
+                  type: custom:mushroom-template-card
+                  primary: >-
+                    {%- set ouvrants = {
+                      'Porte conducteur': 'binary_sensor.voiture_cyril_porte_conducteur',
+                      'Porte passager': 'binary_sensor.voiture_cyril_porte_passager',
+                      'Arrière gauche': 'binary_sensor.voiture_cyril_porte_arriere_gauche',
+                      'Arrière droite': 'binary_sensor.voiture_cyril_porte_arriere_droite',
+                      'Coffre': 'binary_sensor.voiture_cyril_coffre'
+                    } -%}
+                    {%- set ns = namespace(open=[]) -%}
+                    {%- for nom, e in ouvrants.items() if is_state(e, 'on') -%}
+                      {%- set ns.open = ns.open + [nom] -%}
+                    {%- endfor -%}
+                    {{ 'Voiture déverrouillée' if ns.open | count == 0 else 'Ouvert : ' ~ ns.open | join(', ') }}
+                  secondary: Vérifie la voiture
+                  icon: mdi:car-door
+                  icon_color: red
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border: none;
+                        border-radius: 18px;
+                        background: rgba(var(--rgb-red, 244, 67, 54), 0.12);
+                      }
+
+              - type: grid
+                columns: 3
+                square: false
+                grid_options: *full_width
+                cards:
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_niveau_carburant
+                    primary: "{{ states('sensor.voiture_cyril_niveau_carburant') | int(0) }} %"
+                    secondary: Carburant
+                    icon: mdi:gas-station
+                    icon_color: >-
+                      {% set f = states('sensor.voiture_cyril_niveau_carburant') | int(0) %}
+                      {{ 'green' if f > 50 else 'orange' if f > 20 else 'red' }}
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: &tile
+                      style: |
+                        ha-card {
+                          border: none;
+                          border-radius: 18px;
+                          background: rgba(var(--rgb-primary-text-color), 0.04);
+                          box-shadow: none;
+                        }
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_autonomie_carburant
+                    primary: "{{ states('sensor.voiture_cyril_autonomie_carburant') | int(0) }} km"
+                    secondary: Autonomie
+                    icon: mdi:map-marker-distance
+                    icon_color: blue
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_kilometrage
+                    primary: >-
+                      {{ '{:,}'.format(states('sensor.voiture_cyril_kilometrage') | float(0) | round(0) | int).replace(',', ' ') }} km
+                    secondary: Compteur
+                    icon: mdi:counter
+                    icon_color: grey
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: *tile
+
+              - type: custom:mushroom-title-card
+                subtitle: Commandes
+                grid_options: *full_width
+                card_mod: &subtitle_pad
+                  style: |
+                    ha-card { padding: 8px 4px 0 4px; }
+
+              - type: grid
+                columns: 4
+                square: false
+                grid_options: *full_width
+                cards:
+                  - type: conditional
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_portes
+                        state: 'off'
+                    card:
+                      type: custom:mushroom-template-card
+                      primary: Ouvrir
+                      icon: mdi:lock-open-variant
+                      icon_color: orange
+                      layout: vertical
+                      tap_action:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.voiture_cyril_deverrouiller_portes
+                        confirmation:
+                          text: Déverrouiller la Peugeot 208 ?
+                      card_mod: *tile
+                  - type: conditional
+                    conditions:
+                      - condition: state
+                        entity: binary_sensor.voiture_cyril_portes
+                        state: 'on'
+                    card:
+                      type: custom:mushroom-template-card
+                      primary: Fermer
+                      icon: mdi:lock
+                      icon_color: green
+                      layout: vertical
+                      tap_action:
+                        action: perform-action
+                        perform_action: button.press
+                        target:
+                          entity_id: button.voiture_cyril_verrouiller_portes
+                      card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    primary: Klaxon
+                    icon: mdi:bullhorn
+                    icon_color: red
+                    layout: vertical
+                    tap_action:
+                      action: perform-action
+                      perform_action: button.press
+                      target:
+                        entity_id: button.voiture_cyril_activer_klaxon
+                      confirmation:
+                        text: Klaxonner ? (les voisins vont adorer)
+                    card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    primary: Phares
+                    icon: mdi:car-parking-lights
+                    icon_color: amber
+                    layout: vertical
+                    tap_action:
+                      action: perform-action
+                      perform_action: button.press
+                      target:
+                        entity_id: button.voiture_cyril_allumer_phares
+                    card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    primary: Actualiser
+                    icon: mdi:sync
+                    icon_color: blue
+                    layout: vertical
+                    tap_action:
+                      action: perform-action
+                      perform_action: button.press
+                      target:
+                        entity_id: button.voiture_cyril_reveil
+                    card_mod: *tile
+
+              - type: conditional
+                grid_options: *full_width
+                conditions:
+                  - condition: state
+                    entity: sensor.voiture_cyril_statut_de_la_commande
+                    state_not:
+                      - unknown
+                      - unavailable
+                card:
+                  type: custom:mushroom-template-card
+                  entity: sensor.voiture_cyril_statut_de_la_commande
+                  primary: Dernière commande
+                  secondary: "{{ states('sensor.voiture_cyril_statut_de_la_commande') }}"
+                  icon: mdi:broadcast
+                  icon_color: >-
+                    {{ 'green' if is_state('binary_sensor.voiture_cyril_commandes_a_distance', 'on') else 'grey' }}
+                  tap_action:
+                    action: more-info
+                  card_mod: *tile
+
+              - type: conditional
+                grid_options: *full_width
+                conditions:
+                  - condition: state
+                    entity: sensor.voiture_cyril_dernier_trajet
+                    state_not:
+                      - unknown
+                      - unavailable
+                card:
+                  type: custom:mushroom-template-card
+                  entity: sensor.voiture_cyril_dernier_trajet
+                  primary: >-
+                    Dernier trajet · {{ states('sensor.voiture_cyril_dernier_trajet') | float(0) | round(1) | string | replace('.', ',') }} km
+                  secondary: >-
+                    {%- set a = states.sensor.voiture_cyril_dernier_trajet.attributes -%}
+                    {%- set d = (a.duration | default('0:0:0')).split(':') -%}
+                    {%- set h = d[0] | int(0) -%}{%- set m = d[1] | int(0) -%}
+                    ⏱️ {{ h ~ 'h' ~ '%02d' | format(m) if h > 0 else m ~ ' min' }}
+                    · ⌀ {{ (a.avg_speed | default('0')).split(' ')[0] | float(0) | round(0) | int }} km/h
+                    · ⛽ {{ (a.fuel_avg_consumption | default('0')).split(' ')[0] | float(0) | round(1) | string | replace('.', ',') }} L/100
+                  icon: mdi:map-marker-path
+                  icon_color: indigo
+                  tap_action:
+                    action: more-info
+                  card_mod: *tile
+
+              - type: custom:mushroom-title-card
+                subtitle: Mécanique
+                grid_options: *full_width
+                card_mod: *subtitle_pad
+
+              - type: grid
+                columns: 3
+                square: false
+                grid_options: *full_width
+                cards:
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_batterie_de_service
+                    primary: "{{ states('sensor.voiture_cyril_batterie_de_service') | int(0) }} %"
+                    secondary: Batterie 12V
+                    icon: mdi:car-battery
+                    icon_color: >-
+                      {% set b = states('sensor.voiture_cyril_batterie_de_service') | int(0) %}
+                      {{ 'green' if b > 60 else 'orange' if b > 40 else 'red' }}
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_temperature_huile
+                    primary: "{{ states('sensor.voiture_cyril_temperature_huile') | int(0) }} °C"
+                    secondary: Huile
+                    icon: mdi:oil-temperature
+                    icon_color: >-
+                      {% set h = states('sensor.voiture_cyril_temperature_huile') | int(0) %}
+                      {{ 'red' if h >= 130 else 'green' if h >= 70 else 'blue' }}
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: *tile
+                  - type: custom:mushroom-template-card
+                    entity: sensor.voiture_cyril_temperature_liquide_de_refroidissement
+                    primary: "{{ states('sensor.voiture_cyril_temperature_liquide_de_refroidissement') | int(0) }} °C"
+                    secondary: Refroidissement
+                    icon: mdi:coolant-temperature
+                    icon_color: >-
+                      {% set c = states('sensor.voiture_cyril_temperature_liquide_de_refroidissement') | int(0) %}
+                      {{ 'red' if c >= 110 else 'green' if c >= 70 else 'blue' }}
+                    layout: vertical
+                    tap_action:
+                      action: more-info
+                    card_mod: *tile
+
+              - type: custom:mushroom-chips-card
+                alignment: center
+                grid_options: *full_width
+                chips:
+                  - type: template
+                    entity: sensor.voiture_cyril_temperature
+                    icon: mdi:thermometer
+                    icon_color: >-
+                      {% set t = states('sensor.voiture_cyril_temperature') | float(10) %}
+                      {{ 'blue' if t <= 3 else 'red' if t >= 28 else 'teal' }}
+                    content: "Ext. {{ states('sensor.voiture_cyril_temperature') | int(0) }} °C"
+                    tap_action:
+                      action: more-info
+                  - type: template
+                    entity: sensor.voiture_cyril_consommation_totale_carburant
+                    icon: mdi:gas-station-outline
+                    icon_color: amber
+                    content: >-
+                      {{ states('sensor.voiture_cyril_consommation_totale_carburant') | float(0) | round(1) | string | replace('.', ',') }} L consommés
+                    tap_action:
+                      action: more-info
+                  - type: template
+                    entity: sensor.voiture_cyril_comportement_de_conduite
+                    icon: mdi:steering
+                    icon_color: purple
+                    content: >-
+                      {{ states('sensor.voiture_cyril_comportement_de_conduite') | replace('normal', 'Conduite normale') }}
+                    tap_action:
+                      action: more-info
+
+              - type: custom:mushroom-template-card
+                entity: sensor.voiture_cyril_jours_avant_entretien
+                primary: Prochain entretien
+                secondary: >-
+                  Dans {{ states('sensor.voiture_cyril_jours_avant_entretien') | int(0) }} jours
+                  ou {{ '{:,}'.format(states('sensor.voiture_cyril_kilometrage_avant_entretien') | int(0)).replace(',', ' ') }} km
+                icon: mdi:car-wrench
+                icon_color: >-
+                  {%- set j = states('sensor.voiture_cyril_jours_avant_entretien') | int(999) -%}
+                  {%- set k = states('sensor.voiture_cyril_kilometrage_avant_entretien') | int(99999) -%}
+                  {{ 'red' if j < 30 or k < 1000 else 'orange' if j < 90 or k < 3000 else 'teal' }}
+                tap_action:
+                  action: more-info
+                grid_options: *full_width
+                card_mod: *tile
+
+              - type: map
+                entities:
+                  - device_tracker.voiture_cyril_vehicule
+                default_zoom: 15
+                aspect_ratio: '2:1'
+                theme_mode: auto
+                grid_options: *full_width
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      border-radius: 20px;
+                      overflow: hidden;
+                    }
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
+
+  # ===========================================================================
+  #  LABO (ex-« Calendrier ») — vue de test
+  #  Elle s'appelait « Calendrier » mais ne contenait aucun calendrier : juste
+  #  des brouillons (ancienne carte machine à laver, ventilo et télécommande en
+  #  double, Pi-hole). Renommée + réservée à l'admin. Supprime-la si inutile.
+  # ===========================================================================
+  - type: sections
+    title: Labo
+    path: labo
+    icon: mdi:flask-outline
+    max_columns: 4
+    visible:
+      - user: de1fc08b628c4608afe7d6a11e3b3947
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Tests
+            icon: mdi:flask-outline
+          - type: custom:button-card
+            entity: sensor.lave_linge_machine_state
+            name: Machine à laver (ancienne carte)
+            icon: mdi:washing-machine
+            show_state: false
+            show_label: true
+            tap_action:
+              action: more-info
+            variables:
+              sensor_progress: sensor.smart_washer_progress
+              sensor_time_remaining: sensor.lave_linge_completion_time
+              sensor_power: sensor.lave_linge_energie
+              sensor_percentage: sensor.smart_washer_percentage
+            label: |
+              [[[
+                const map = {
+                  wash: 'Lavage', washing: 'Lavage', rinse: 'Rinçage', rinsing: 'Rinçage',
+                  spin: 'Essorage', spinning: 'Essorage', dry: 'Séchage', drying: 'Séchage',
+                  finished: 'Terminé', complete: 'Terminé', end: 'Terminé',
+                  idle: 'En veille', standby: 'En veille', off: 'Éteinte', pause: 'En pause'
+                };
+                const raw = entity.state || 'unknown';
+                return map[raw.toLowerCase()] || raw;
+              ]]]
+            styles:
+              card:
+                - height: 120px
+                - border-radius: 24px
+                - padding: 16px
+                - overflow: hidden
+                - position: relative
+                - background: |
+                    [[[
+                      const s = entity.state?.toLowerCase() || '';
+                      if (['wash','washing','rinse','rinsing','pre-wash','soak'].includes(s))
+                        return 'linear-gradient(135deg, rgba(33,150,243,.22), rgba(33,150,243,.05))';
+                      if (['spin','spinning'].includes(s))
+                        return 'linear-gradient(135deg, rgba(0,188,212,.24), rgba(0,188,212,.05))';
+                      if (['dry','drying'].includes(s))
+                        return 'linear-gradient(135deg, rgba(255,152,0,.24), rgba(255,152,0,.05))';
+                      if (['finished','complete','end'].includes(s))
+                        return 'linear-gradient(135deg, rgba(76,175,80,.24), rgba(76,175,80,.05))';
+                      return 'linear-gradient(135deg, rgba(120,120,120,.14), rgba(120,120,120,.04))';
+                    ]]]
+                - box-shadow: 0 8px 24px rgba(0,0,0,.12)
+                - border: 1px solid rgba(255,255,255,.08)
+              grid:
+                - grid-template-areas: |
+                    "i n badge"
+                    "i l badge"
+                    "bar bar bar"
+                - grid-template-columns: 64px 1fr auto
+                - grid-template-rows: 1fr 1fr 12px
+                - column-gap: 14px
+                - height: 100%
+              img_cell:
+                - width: 62px
+                - height: 62px
+                - border-radius: 20px
+                - background: rgba(255,255,255,.10)
+                - backdrop-filter: blur(10px)
+                - align-self: center
+                - justify-self: center
+                - box-shadow: inset 0 0 0 1px rgba(255,255,255,.08)
+              icon:
+                - width: 38px
+                - color: |
+                    [[[
+                      const s = entity.state?.toLowerCase() || '';
+                      if (['spin','spinning'].includes(s)) return '#00bcd4';
+                      if (['dry','drying'].includes(s)) return '#ff9800';
+                      if (['finished','complete','end'].includes(s)) return '#4caf50';
+                      if (['wash','washing','rinse','rinsing','pre-wash','soak'].includes(s)) return '#2196f3';
+                      return 'var(--secondary-text-color)';
+                    ]]]
+                - animation: |
+                    [[[
+                      const s = entity.state?.toLowerCase() || '';
+                      if (['spin','spinning'].includes(s)) return 'spin 1s linear infinite';
+                      if (['wash','washing','rinse','rinsing','pre-wash','soak'].includes(s)) return 'shake 1.6s ease-in-out infinite';
+                      return 'none';
+                    ]]]
+              name:
+                - justify-self: start
+                - align-self: end
+                - font-size: 16px
+                - font-weight: 700
+              label:
+                - justify-self: start
+                - align-self: start
+                - font-size: 13px
+                - opacity: 0.75
+              custom_fields:
+                badge:
+                  - align-self: center
+                  - justify-self: end
+                  - text-align: right
+                  - font-size: 12px
+                  - line-height: 1.45
+                  - padding: 8px 10px
+                  - border-radius: 14px
+                  - background: rgba(255,255,255,.10)
+                  - backdrop-filter: blur(10px)
+                  - min-width: 72px
+                bar:
+                  - position: absolute
+                  - left: 16px
+                  - right: 16px
+                  - bottom: 14px
+                  - height: 8px
+                  - border-radius: 999px
+                  - overflow: hidden
+                  - background: rgba(255,255,255,.12)
+            custom_fields:
+              badge: |
+                [[[
+                  const p = states[variables.sensor_power];
+                  const power = p ? Math.round(parseFloat(p.state)) + ' W' : '— W';
+                  let percent = parseInt(states[variables.sensor_percentage]?.state);
+                  if (isNaN(percent)) percent = 0;
+                  const raw = states[variables.sensor_time_remaining]?.state || '';
+                  let timeText = '';
+                  if (raw.includes('-') && raw.includes(':')) {
+                    const diff = Math.max(0, Math.floor((new Date(raw) - new Date()) / 60000));
+                    if (diff > 0) timeText = `${Math.floor(diff / 60)}h${String(diff % 60).padStart(2, '0')}`;
+                  }
+                  return `<div>⚡ ${power}</div><div>⏳ ${timeText || '—'}</div><div>🧼 ${percent}%</div>`;
+                ]]]
+              bar: |
+                [[[
+                  let percent = parseInt(states[variables.sensor_percentage]?.state);
+                  if (isNaN(percent)) percent = 0;
+                  percent = Math.max(0, Math.min(100, percent));
+                  const s = entity.state?.toLowerCase() || '';
+                  let color = '#9e9e9e';
+                  if (['wash','washing','rinse','rinsing','pre-wash','soak'].includes(s)) color = '#2196f3';
+                  if (['spin','spinning'].includes(s)) color = '#00bcd4';
+                  if (['dry','drying'].includes(s)) color = '#ff9800';
+                  if (['finished','complete','end'].includes(s)) color = '#4caf50';
+                  return `<div style="height:100%;width:${percent}%;background:${color};border-radius:999px;box-shadow:0 0 12px ${color};transition:width .6s ease;"></div>`;
+                ]]]
+            extra_styles: |
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to   { transform: rotate(360deg); }
+              }
+              @keyframes shake {
+                0%, 100% { transform: rotate(0deg); }
+                25% { transform: rotate(5deg) translateY(-1px); }
+                75% { transform: rotate(-5deg) translateY(1px); }
+              }
+          # Même carte que dans le pop-up #ventilation (réutilisée via ancre)
+          - *fan_card
+          - type: custom:pi-hole
+            device_id: dabdfa26a0cf174d37cd2810451ec8e5
+            exclude_sections:
+              - footer
+            switch_style: flex
+            switch_spacing: flex
+            chart:
+              line_type: normal
+            features:
+              - disable_group_pausing
+      - type: grid
+        cards:
+          - type: heading
+            heading: Télécommande
+            icon: mdi:remote-tv
+          # Même config que le pop-up #TV_remote (réutilisée via ancre)
+          - *tv_remote
+      - type: grid
+        cards:
+          - type: custom:navbar-card
+            template: nav-bar
